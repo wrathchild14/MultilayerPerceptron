@@ -1,16 +1,17 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "mlp.h"
 
-void load_training_data(const char* file_path, double** inputs, double** labels, const int num_samples,
+bool load_training_data(const char* file_path, double** inputs, double** labels, const int num_samples,
                         const int input_size, const int output_size)
 {
 	FILE* file = fopen(file_path, "r");
 	if (file == NULL)
 	{
 		printf("Error opening file: %s\n", file_path);
-		return;
+		return false;
 	}
 
 	for (int i = 0; i < num_samples; i++)
@@ -26,6 +27,7 @@ void load_training_data(const char* file_path, double** inputs, double** labels,
 	}
 
 	fclose(file);
+	return true;
 }
 
 int main(void)
@@ -35,7 +37,7 @@ int main(void)
 	const int output_size = 3;
 	const int hidden_size = 10;
 	const int num_samples = 50;
-	const double learning_rate = 0.1;
+	const double learning_rate = 0.1;	
 	const int epochs = 50;
 
 	double** inputs = malloc(num_samples * sizeof(double*));
@@ -46,11 +48,12 @@ int main(void)
 		labels[i] = malloc(output_size * sizeof(double));
 	}
 
-	load_training_data(file_path, inputs, labels, num_samples, input_size, output_size);
+	if (load_training_data(file_path, inputs, labels, num_samples, input_size, output_size)) {
 
-	mlp* network = create_mlp(input_size, hidden_size, output_size);
-	train(network, inputs, labels, num_samples, learning_rate, epochs);
-
+		mlp* network = create_mlp(input_size, hidden_size, output_size);
+		train(network, inputs, labels, num_samples, learning_rate, epochs);
+		free_network(network);
+	}
 	for (int i = 0; i < num_samples; i++)
 	{
 		free(inputs[i]);
@@ -58,7 +61,6 @@ int main(void)
 	}
 	free(inputs);
 	free(labels);
-	free_network(network);
 
 	return 0;
 }

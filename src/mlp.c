@@ -173,7 +173,7 @@ void backward(const mlp* network, const double* input, const double* target, con
 	free(hidden_error);
 }
 
-void train(const mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
+void train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
            const int epochs)
 {
 	for (int epoch = 0; epoch < epochs; epoch++)
