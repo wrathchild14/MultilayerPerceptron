@@ -86,7 +86,7 @@ double activation_derivative(const double x)
 	return 1 - pow(tanh(x), 2);
 }
 
-void forward(const mlp* network, const double* input)
+void forward(mlp* network, const double* input)
 {
 	// hidden layer
 	for (int i = 0; i < network->hidden_size; i++)
@@ -109,6 +109,15 @@ void forward(const mlp* network, const double* input)
 		}
 		network->output[i] = activation(sum + network->b2[i]);
 	}
+
+	network->loss = 0;
+	for (int i = 0; i < network->output_size; i++)
+	{
+		const double output = network->output[i];
+		const double target = input[i];
+		network->loss += pow(output - target, 2);
+	}
+	network->loss /= network->output_size;
 }
 
 
@@ -169,6 +178,8 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 {
 	for (int epoch = 0; epoch < epochs; epoch++)
 	{
+		printf("Epoch %d/%d:\n", epoch + 1, epochs);
+
 		for (int sample = 0; sample < num_samples; sample++)
 		{
 			const double* input = inputs[sample];
@@ -176,6 +187,9 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 
 			forward(network, inputs[sample]);
 			backward(network, input, target, learning_rate);
+
+			printf("Sample %d/%d - Loss: %lf\n", sample + 1, num_samples, network->loss);
 		}
+		printf("\n");
 	}
 }
