@@ -54,7 +54,7 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 	return network;
 }
 
-void free_mlp(mlp* network)
+void free_network(mlp* network)
 {
 	for (int i = 0; i < network->input_size; i++)
 	{

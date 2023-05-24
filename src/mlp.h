@@ -20,7 +20,7 @@ typedef struct
 } mlp;
 
 mlp* create_mlp(int input_size, int hidden_size, int output_size);
-void free_mlp(mlp* network);
+void free_network(mlp* network);
 
 double activation(double x);
 double activation_derivative(double x);
