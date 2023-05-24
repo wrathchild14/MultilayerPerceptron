@@ -2,32 +2,34 @@
 
 mlp* create_mlp(const int input_size, const int hidden_size, const int output_size)
 {
-	mlp* mlp = malloc(sizeof(*mlp));
-	mlp->input_size = input_size;
-	mlp->hidden_size = hidden_size;
-	mlp->output_size = output_size;
+	mlp* network = malloc(sizeof(mlp));
+	network->input_size = input_size;
+	network->hidden_size = hidden_size;
+	network->output_size = output_size;
 
-	mlp->w1 = malloc(input_size * sizeof(double*));
-	mlp->w2 = malloc(hidden_size * sizeof(double*));
-	mlp->b1 = malloc(hidden_size * sizeof(double));
-	mlp->b2 = malloc(output_size * sizeof(double));
+	network->w1 = malloc(input_size * sizeof(double*));
+	network->w2 = malloc(hidden_size * sizeof(double*));
+	network->b1 = malloc(hidden_size * sizeof(double));
+	network->b2 = malloc(output_size * sizeof(double));
+
+	network->hidden = malloc(hidden_size * sizeof(double));
+	network->output = malloc(output_size * sizeof(double));
 
 	for (int i = 0; i < input_size; i++)
 	{
-		mlp->w1[i] = malloc(hidden_size * sizeof(double));
+		network->w1[i] = malloc(hidden_size * sizeof(double));
 	}
 
 	for (int i = 0; i < hidden_size; i++)
 	{
-		mlp->w2[i] = malloc(output_size * sizeof(double));
+		network->w2[i] = malloc(output_size * sizeof(double));
 	}
 
-	// init weights and biases
 	for (int i = 0; i < input_size; i++)
 	{
 		for (int j = 0; j < hidden_size; j++)
 		{
-			mlp->w1[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
+			network->w1[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
 		}
 	}
 
@@ -35,41 +37,43 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 	{
 		for (int j = 0; j < output_size; j++)
 		{
-			mlp->w2[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
+			network->w2[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
 		}
 	}
 
 	for (int i = 0; i < hidden_size; i++)
 	{
-		mlp->b1[i] = 0;
+		network->b1[i] = 0;
 	}
 
 	for (int i = 0; i < output_size; i++)
 	{
-		mlp->b2[i] = 0;
+		network->b2[i] = 0;
 	}
 
-	return mlp;
+	return network;
 }
 
-void free_mlp(mlp* mlp)
+void free_mlp(mlp* network)
 {
-	for (int i = 0; i < mlp->input_size; i++)
+	for (int i = 0; i < network->input_size; i++)
 	{
-		free(mlp->w1[i]);
+		free(network->w1[i]);
 	}
-	free(mlp->w1);
+	free(network->w1);
 
-	for (int i = 0; i < mlp->hidden_size; i++)
+	for (int i = 0; i < network->hidden_size; i++)
 	{
-		free(mlp->w2[i]);
+		free(network->w2[i]);
 	}
-	free(mlp->w2);
+	free(network->w2);
 
-	free(mlp->b1);
-	free(mlp->b2);
+	free(network->b1);
+	free(network->b2);
+	free(network->hidden);
+	free(network->output);
 
-	free(mlp);
+	free(network);
 }
 
 double activation(const double x)
@@ -82,31 +86,96 @@ double activation_derivative(const double x)
 	return 1 - pow(tanh(x), 2);
 }
 
-double* forward(const mlp* mlp, const double* input)
+void forward(const mlp* network, const double* input)
 {
-	double* hidden = malloc(mlp->hidden_size * sizeof(double));
-	double* output = malloc(mlp->output_size * sizeof(double));
-
-	for (int i = 0; i < mlp->hidden_size; i++)
+	// hidden layer
+	for (int i = 0; i < network->hidden_size; i++)
 	{
 		double sum = 0;
-		for (int j = 0; j < mlp->input_size; j++)
+		for (int j = 0; j < network->input_size; j++)
 		{
-			sum += input[j] * mlp->w1[j][i];
+			sum += input[j] * network->w1[j][i];
 		}
-		hidden[i] = activation(sum + mlp->b1[i]);
+		network->hidden[i] = activation(sum + network->b1[i]);
 	}
 
-	for (int i = 0; i < mlp->output_size; i++)
+	// output layer
+	for (int i = 0; i < network->output_size; i++)
 	{
 		double sum = 0;
-		for (int j = 0; j < mlp->hidden_size; j++)
+		for (int j = 0; j < network->hidden_size; j++)
 		{
-			sum += hidden[j] * mlp->w2[j][i];
+			sum += network->hidden[j] * network->w2[j][i];
 		}
-		output[i] = activation(sum + mlp->b2[i]);
+		network->output[i] = activation(sum + network->b2[i]);
+	}
+}
+
+
+void backward(const mlp* network, const double* input, const double* target, const double learning_rate)
+{
+	// memory for error terms
+	double* output_error = malloc(network->output_size * sizeof(double));
+	double* hidden_error = malloc(network->hidden_size * sizeof(double));
+
+	// output error terms
+	for (int i = 0; i < network->output_size; i++)
+	{
+		const double output = network->output[i];
+		output_error[i] = (output - target[i]) * activation_derivative(output);
 	}
 
-	free(hidden);
-	return output;
+	// hidden error terms
+	for (int i = 0; i < network->hidden_size; i++)
+	{
+		double error = 0;
+		for (int j = 0; j < network->output_size; j++)
+		{
+			error += output_error[j] * network->w2[i][j];
+		}
+		hidden_error[i] = error * activation_derivative(network->hidden[i]);
+	}
+
+	// weights and biases
+	for (int i = 0; i < network->input_size; i++)
+	{
+		for (int j = 0; j < network->hidden_size; j++)
+		{
+			network->w1[i][j] -= learning_rate * hidden_error[j] * input[i];
+		}
+	}
+	for (int i = 0; i < network->hidden_size; i++)
+	{
+		for (int j = 0; j < network->output_size; j++)
+		{
+			network->w2[i][j] -= learning_rate * output_error[j] * network->hidden[i];
+		}
+	}
+	for (int i = 0; i < network->hidden_size; i++)
+	{
+		network->b1[i] -= learning_rate * hidden_error[i];
+	}
+	for (int i = 0; i < network->output_size; i++)
+	{
+		network->b2[i] -= learning_rate * output_error[i];
+	}
+
+	free(output_error);
+	free(hidden_error);
+}
+
+void train(const mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
+           const int epochs)
+{
+	for (int epoch = 0; epoch < epochs; epoch++)
+	{
+		for (int sample = 0; sample < num_samples; sample++)
+		{
+			const double* input = inputs[sample];
+			const double* target = labels[sample];
+
+			forward(network, inputs[sample]);
+			backward(network, input, target, learning_rate);
+		}
+	}
 }

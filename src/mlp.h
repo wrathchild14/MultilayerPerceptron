@@ -14,17 +14,20 @@ typedef struct
 	double** w2;
 	double* b1;
 	double* b2;
+	double learning_rate;
+	double* hidden;
+	double* output;
 } mlp;
 
 mlp* create_mlp(int input_size, int hidden_size, int output_size);
+void free_mlp(mlp* network);
 
-void free_mlp(mlp* mlp);
-
-// currently tanh
 double activation(double x);
-
 double activation_derivative(double x);
 
-double* forward(const mlp* mlp, const double* input);
+void forward(const mlp* network, const double* input);
+void backward(const mlp* network, const double* input, const double* target, double learning_rate);
+
+void train(mlp* network, double** inputs, double** labels, int num_samples, double learning_rate, int epochs);
 
 #endif /* MLP_H */
