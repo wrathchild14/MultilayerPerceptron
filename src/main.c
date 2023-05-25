@@ -36,9 +36,9 @@ int main(void)
 	const int input_size = 4;
 	const int output_size = 3;
 	const int hidden_size = 10;
-	const int num_samples = 50;
-	const double learning_rate = 0.1;	
-	const int epochs = 50;
+	const int num_samples = 1000;
+	const double learning_rate = 0.1;
+	const int epochs = 100;
 
 	double** inputs = malloc(num_samples * sizeof(double*));
 	double** labels = malloc(num_samples * sizeof(double*));
@@ -48,8 +48,8 @@ int main(void)
 		labels[i] = malloc(output_size * sizeof(double));
 	}
 
-	if (load_training_data(file_path, inputs, labels, num_samples, input_size, output_size)) {
-
+	if (load_training_data(file_path, inputs, labels, num_samples, input_size, output_size))
+	{
 		mlp* network = create_mlp(input_size, hidden_size, output_size);
 		train(network, inputs, labels, num_samples, learning_rate, epochs);
 		free_network(network);

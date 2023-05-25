@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <omp.h>
+
 typedef struct
 {
 	int input_size;

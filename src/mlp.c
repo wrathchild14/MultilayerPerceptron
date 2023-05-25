@@ -176,9 +176,10 @@ void backward(const mlp* network, const double* input, const double* target, con
 void train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
            const int epochs)
 {
+	const double epochs_dt = omp_get_wtime();
 	for (int epoch = 0; epoch < epochs; epoch++)
 	{
-		printf("Epoch %d/%d:\n", epoch + 1, epochs);
+		const double dt = omp_get_wtime();
 
 		for (int sample = 0; sample < num_samples; sample++)
 		{
@@ -187,9 +188,8 @@ void train(mlp* network, double** inputs, double** labels, const int num_samples
 
 			forward(network, inputs[sample]);
 			backward(network, input, target, learning_rate);
-
-			printf("Sample %d/%d - Loss: %lf\n", sample + 1, num_samples, network->loss);
 		}
-		printf("\n");
+		printf("epoch %d/%d, loss %lf, time %f s\n", epoch + 1, epochs, network->loss, omp_get_wtime() - dt);
 	}
+	printf("training done in %f s\n", omp_get_wtime() - epochs_dt);
 }
