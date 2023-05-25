@@ -174,21 +174,29 @@ void backward(const mlp* network, const double* input, const double* target, con
 }
 
 void train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
-           const int epochs)
+           const int epochs, const int batch_size)
 {
 	const double epochs_dt = omp_get_wtime();
 	for (int epoch = 0; epoch < epochs; epoch++)
 	{
 		const double dt = omp_get_wtime();
 
-		for (int sample = 0; sample < num_samples; sample++)
+		for (int batch = 0; batch < num_samples; batch += batch_size)
 		{
-			const double* input = inputs[sample];
-			const double* target = labels[sample];
+			int end = batch + batch_size;
+			if (end > num_samples)
+				end = num_samples;
 
-			forward(network, inputs[sample]);
-			backward(network, input, target, learning_rate);
+			for (int sample = batch; sample < end; sample++)
+			{
+				const double* input = inputs[sample];
+				const double* target = labels[sample];
+
+				forward(network, input);
+				backward(network, input, target, learning_rate);
+			}
 		}
+
 		printf("epoch %d/%d, loss %lf, time %f s\n", epoch + 1, epochs, network->loss, omp_get_wtime() - dt);
 	}
 	printf("training done in %f s\n", omp_get_wtime() - epochs_dt);
