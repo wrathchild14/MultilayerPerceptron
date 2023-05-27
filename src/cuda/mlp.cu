@@ -24,7 +24,7 @@ __device__ double activation_derivative(const double x)
 
 __global__ void forward_kernel(const int input_size, const int hidden_size, const int output_size,
                                const double* input, const double* w1, const double* w2,
-                               const double* b1, const double* b2, double* hidden, double* output)
+                               const double* b1, const double* b2, double* hidden, double* output, double* loss)
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < hidden_size)
@@ -45,13 +45,15 @@ __global__ void forward_kernel(const int input_size, const int hidden_size, cons
 			sum += hidden[j] * w2[j * output_size + i];
 		}
 		output[i] = activation(sum + b2[i]);
+		atomic_add_double(loss, pow(output[i] - input[i], 2)); // mse loss
 	}
 }
 
 __global__ void backward_kernel(const int input_size, const int hidden_size, const int output_size,
                                 const double* input, const double* target, const double* w1, const double* w2,
                                 const double* b1, const double* b2, double* hidden, double* output,
-                                double* w1_gradient, double* w2_gradient, double* b1_gradient, double* b2_gradient)
+                                double* w1_gradient, double* w2_gradient, double* b1_gradient, double* b2_gradient,
+                                const double learning_rate)
 {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -62,9 +64,9 @@ __global__ void backward_kernel(const int input_size, const int hidden_size, con
 		const double output_error = (output1 - target[i]) * activation_derivative(output1);
 		for (int j = 0; j < hidden_size; j++)
 		{
-			atomic_add_double(&w2_gradient[j * output_size + i], output_error * hidden[j]);
+			atomic_add_double(&w2_gradient[j * output_size + i], learning_rate * output_error * hidden[j]);
 		}
-		atomic_add_double(&b2_gradient[i], output_error);
+		atomic_add_double(&b2_gradient[i], learning_rate * output_error);
 	}
 
 	// hidden error terms
@@ -78,17 +80,17 @@ __global__ void backward_kernel(const int input_size, const int hidden_size, con
 		const double hidden_error = error * activation_derivative(hidden[i]);
 		for (int j = 0; j < input_size; j++)
 		{
-			atomic_add_double(&w1_gradient[j * hidden_size + i], hidden_error * input[j]);
+			atomic_add_double(&w1_gradient[j * hidden_size + i], learning_rate * hidden_error * input[j]);
 		}
-		atomic_add_double(&b1_gradient[i], hidden_error);
+		atomic_add_double(&b1_gradient[i], learning_rate * hidden_error);
 	}
 }
 
-void train(const mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
+void train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
            const int epochs, const int batch_size)
 {
 	double *d_w1, *d_w2, *d_w1_gradient, *d_w2_gradient;
-	double *d_b1, *d_b2, *d_hidden, *d_output;
+	double *d_b1, *d_b2, *d_hidden, *d_output, *d_loss;
 
 	cudaMalloc(reinterpret_cast<void**>(&d_w1), network->input_size * network->hidden_size * sizeof(double));
 	cudaMalloc(reinterpret_cast<void**>(&d_w2), network->hidden_size * network->output_size * sizeof(double));
@@ -98,6 +100,7 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 	cudaMalloc(reinterpret_cast<void**>(&d_b2), network->output_size * sizeof(double));
 	cudaMalloc(reinterpret_cast<void**>(&d_hidden), network->hidden_size * sizeof(double));
 	cudaMalloc(reinterpret_cast<void**>(&d_output), network->output_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_loss), sizeof(double));
 
 	// host to gpu
 	cudaMemcpy(d_w1, network->w1[0], network->input_size * network->hidden_size * sizeof(double),
@@ -109,12 +112,14 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 
 	for (int epoch = 0; epoch < epochs; epoch++)
 	{
+		double epoch_loss = 0.0;
 		for (int batch = 0; batch < num_samples; batch += batch_size)
 		{
 			int end = batch + batch_size;
 			if (end > num_samples)
 				end = num_samples;
 
+			double loss;
 			double *d_w1_gradient, *d_w2_gradient;
 			double *d_b1_gradient, *d_b2_gradient;
 
@@ -142,14 +147,17 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 
 				forward_kernel << <network->hidden_size / 256 + 1, 256 >> >(network->input_size, network->hidden_size,
 				                                                            network->output_size, input, d_w1, d_w2,
-				                                                            d_b1, d_b2, d_hidden, d_output);
+				                                                            d_b1, d_b2, d_hidden, d_output, d_loss);
+				cudaMemcpy(&loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost);
+				epoch_loss += loss;
 				cudaDeviceSynchronize();
 
 				backward_kernel << <network->hidden_size / 256 + 1, 256 >> >(network->input_size, network->hidden_size,
 				                                                             network->output_size, input, target, d_w1,
 				                                                             d_w2, d_b1, d_b2, d_hidden, d_output,
 				                                                             d_w1_gradient, d_w2_gradient,
-				                                                             d_b1_gradient, d_b2_gradient);
+				                                                             d_b1_gradient, d_b2_gradient,
+				                                                             learning_rate);
 				cudaDeviceSynchronize();
 			}
 
@@ -175,7 +183,7 @@ void train(const mlp* network, double** inputs, double** labels, const int num_s
 			cudaFree(d_b2_gradient);
 		}
 
-		printf("epoch %d/%d, loss %lf\n", epoch + 1, epochs, network->loss);
+		printf("epoch %d/%d, loss %lf\n", epoch + 1, epochs, epoch_loss);
 	}
 
 	cudaMemcpy(network->w1, d_w1, network->input_size * network->hidden_size * sizeof(double), cudaMemcpyDeviceToHost);
