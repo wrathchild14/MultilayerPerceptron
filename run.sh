@@ -6,6 +6,6 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --reservation=fri
 
-gcc --openmp src/main.c src/mlp.c -o mlp_out -lm
+gcc --openmp src/serial/main.c src/serial/mlp.c -o mlp_out -lm
 srun --ntasks=1 mlp_out
 rm mlp_out
