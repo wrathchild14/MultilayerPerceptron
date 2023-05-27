@@ -15,16 +15,19 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 	network->hidden = malloc(hidden_size * sizeof(double));
 	network->output = malloc(output_size * sizeof(double));
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < input_size; i++)
 	{
 		network->w1[i] = malloc(hidden_size * sizeof(double));
 	}
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < hidden_size; i++)
 	{
 		network->w2[i] = malloc(output_size * sizeof(double));
 	}
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < input_size; i++)
 	{
 		for (int j = 0; j < hidden_size; j++)
@@ -33,6 +36,7 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 		}
 	}
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < hidden_size; i++)
 	{
 		for (int j = 0; j < output_size; j++)
@@ -41,11 +45,13 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 		}
 	}
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < hidden_size; i++)
 	{
 		network->b1[i] = 0;
 	}
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < output_size; i++)
 	{
 		network->b2[i] = 0;
@@ -56,12 +62,14 @@ mlp* create_mlp(const int input_size, const int hidden_size, const int output_si
 
 void free_network(mlp* network)
 {
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->input_size; i++)
 	{
 		free(network->w1[i]);
 	}
 	free(network->w1);
 
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->hidden_size; i++)
 	{
 		free(network->w2[i]);
@@ -134,6 +142,7 @@ void backward(const mlp* network, const double* input, const double* target, con
 	double* hidden_error = malloc(network->hidden_size * sizeof(double));
 
 	// output error terms
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->output_size; i++)
 	{
 		const double output = network->output[i];
@@ -141,6 +150,7 @@ void backward(const mlp* network, const double* input, const double* target, con
 	}
 
 	// hidden error terms
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->hidden_size; i++)
 	{
 		double error = 0;
@@ -152,6 +162,7 @@ void backward(const mlp* network, const double* input, const double* target, con
 	}
 
 	// weights and biases
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->input_size; i++)
 	{
 		for (int j = 0; j < network->hidden_size; j++)
@@ -159,6 +170,8 @@ void backward(const mlp* network, const double* input, const double* target, con
 			network->w1[i][j] -= learning_rate * hidden_error[j] * input[i];
 		}
 	}
+
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->hidden_size; i++)
 	{
 		for (int j = 0; j < network->output_size; j++)
@@ -166,10 +179,14 @@ void backward(const mlp* network, const double* input, const double* target, con
 			network->w2[i][j] -= learning_rate * output_error[j] * network->hidden[i];
 		}
 	}
+
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->hidden_size; i++)
 	{
 		network->b1[i] -= learning_rate * hidden_error[i];
 	}
+
+    #pragma omp parallel for schedule(dynamic, 1)
 	for (int i = 0; i < network->output_size; i++)
 	{
 		network->b2[i] -= learning_rate * output_error[i];
@@ -212,10 +229,6 @@ void train(mlp* network, double** inputs, double** labels, const int num_samples
 	printf("training done in %f s\n", omp_get_wtime() - epochs_start_time);
 
     // serial training done in 0.492667 s
-    // 2 training done in 0.281355 s
-    // 4 training done in 0.255695 s
-    // 8 training done in 0.238517 s ----
-    // 16 training done in 0.283492 s
-    // 32 training done in 0.329948 s
+    // fully parallel training done in 4.896237 s
 }
 
