@@ -80,14 +80,11 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
+    <ClCompile Include="src\serial\main.c" />
+    <ClCompile Include="src\serial\mlp.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\main.c" />
-    <ClCompile Include="src\mlp.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="src\mlp.h" />
+    <ClInclude Include="src\serial\mlp.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
