@@ -39,12 +39,12 @@ int main(void)
 	const int epochs = 100;
 	const double learning_rate = 0.001;
 
-	double** inputs = malloc(num_samples * sizeof(double*));
-	double** labels = malloc(num_samples * sizeof(double*));
+	double** inputs = static_cast<double **>(malloc(num_samples * sizeof(double*)));
+	double** labels = static_cast<double **>(malloc(num_samples * sizeof(double*)));
 	for (int i = 0; i < num_samples; i++)
 	{
-		inputs[i] = malloc(input_size * sizeof(double));
-		labels[i] = malloc(output_size * sizeof(double));
+		inputs[i] = static_cast<double *>(malloc(input_size * sizeof(double)));
+		labels[i] = static_cast<double *>(malloc(output_size * sizeof(double)));
 	}
 
 	if (load_training_data(file_path, inputs, labels, num_samples, input_size, output_size))
