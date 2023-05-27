@@ -14,10 +14,8 @@
     <ClInclude Include="src\cuda\mlp.h" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="src\cuda\main.cu" />
     <CudaCompile Include="src\cuda\mlp.cu" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\cuda\main.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6521F57B-0C19-4D50-89F3-77675F5BCC71}</ProjectGuid>

@@ -1,13 +1,14 @@
 #include "mlp.h"
 
-__device__ double atomicAddDouble(double *address, double val)
+__device__ double atomic_add_double(double* address, double val)
 {
-	auto address_as_ull = (unsigned long long *)address;
+	auto address_as_ull = reinterpret_cast<unsigned long long*>(address);
 	unsigned long long old_val = *address_as_ull, new_val;
 	do
 	{
 		new_val = __double_as_longlong(__longlong_as_double(old_val) + val);
-	} while (atomicCAS(address_as_ull, old_val, new_val) != old_val);
+	}
+	while (atomicCAS(address_as_ull, old_val, new_val) != old_val);
 	return __longlong_as_double(old_val);
 }
 
@@ -22,8 +23,8 @@ __device__ double activation_derivative(const double x)
 }
 
 __global__ void forward_kernel(const int input_size, const int hidden_size, const int output_size,
-							   const double *input, const double *w1, const double *w2,
-							   const double *b1, const double *b2, double *hidden, double *output)
+                               const double* input, const double* w1, const double* w2,
+                               const double* b1, const double* b2, double* hidden, double* output)
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < hidden_size)
@@ -48,9 +49,9 @@ __global__ void forward_kernel(const int input_size, const int hidden_size, cons
 }
 
 __global__ void backward_kernel(const int input_size, const int hidden_size, const int output_size,
-								const double *input, const double *target, const double *w1, const double *w2,
-								const double *b1, const double *b2, double *hidden, double *output,
-								double *w1_gradient, double *w2_gradient, double *b1_gradient, double *b2_gradient)
+                                const double* input, const double* target, const double* w1, const double* w2,
+                                const double* b1, const double* b2, double* hidden, double* output,
+                                double* w1_gradient, double* w2_gradient, double* b1_gradient, double* b2_gradient)
 {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -61,9 +62,9 @@ __global__ void backward_kernel(const int input_size, const int hidden_size, con
 		const double output_error = (output1 - target[i]) * activation_derivative(output1);
 		for (int j = 0; j < hidden_size; j++)
 		{
-			atomicAddDouble(&w2_gradient[j * output_size + i], output_error * hidden[j]);
+			atomic_add_double(&w2_gradient[j * output_size + i], output_error * hidden[j]);
 		}
-		atomicAddDouble(&b2_gradient[i], output_error);
+		atomic_add_double(&b2_gradient[i], output_error);
 	}
 
 	// hidden error terms
@@ -77,32 +78,32 @@ __global__ void backward_kernel(const int input_size, const int hidden_size, con
 		const double hidden_error = error * activation_derivative(hidden[i]);
 		for (int j = 0; j < input_size; j++)
 		{
-			atomicAddDouble(&w1_gradient[j * hidden_size + i], hidden_error * input[j]);
+			atomic_add_double(&w1_gradient[j * hidden_size + i], hidden_error * input[j]);
 		}
-		atomicAddDouble(&b1_gradient[i], hidden_error);
+		atomic_add_double(&b1_gradient[i], hidden_error);
 	}
 }
 
-void train(mlp *network, double **inputs, double **labels, int num_samples, double learning_rate,
-		   int epochs, int batch_size)
+void train(const mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
+           const int epochs, const int batch_size)
 {
 	double *d_w1, *d_w2, *d_w1_gradient, *d_w2_gradient;
 	double *d_b1, *d_b2, *d_hidden, *d_output;
 
-	cudaMalloc((void **)&d_w1, network->input_size * network->hidden_size * sizeof(double));
-	cudaMalloc((void **)&d_w2, network->hidden_size * network->output_size * sizeof(double));
-	cudaMalloc((void **)&d_w1_gradient, network->input_size * network->hidden_size * sizeof(double));
-	cudaMalloc((void **)&d_w2_gradient, network->hidden_size * network->output_size * sizeof(double));
-	cudaMalloc((void **)&d_b1, network->hidden_size * sizeof(double));
-	cudaMalloc((void **)&d_b2, network->output_size * sizeof(double));
-	cudaMalloc((void **)&d_hidden, network->hidden_size * sizeof(double));
-	cudaMalloc((void **)&d_output, network->output_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_w1), network->input_size * network->hidden_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_w2), network->hidden_size * network->output_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_w1_gradient), network->input_size * network->hidden_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_w2_gradient), network->hidden_size * network->output_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_b1), network->hidden_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_b2), network->output_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_hidden), network->hidden_size * sizeof(double));
+	cudaMalloc(reinterpret_cast<void**>(&d_output), network->output_size * sizeof(double));
 
 	// host to gpu
 	cudaMemcpy(d_w1, network->w1[0], network->input_size * network->hidden_size * sizeof(double),
-			   cudaMemcpyHostToDevice);
+	           cudaMemcpyHostToDevice);
 	cudaMemcpy(d_w2, network->w2[0], network->hidden_size * network->output_size * sizeof(double),
-			   cudaMemcpyHostToDevice);
+	           cudaMemcpyHostToDevice);
 	cudaMemcpy(d_b1, network->b1, network->hidden_size * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_b2, network->b2, network->output_size * sizeof(double), cudaMemcpyHostToDevice);
 
@@ -117,10 +118,12 @@ void train(mlp *network, double **inputs, double **labels, int num_samples, doub
 			double *d_w1_gradient, *d_w2_gradient;
 			double *d_b1_gradient, *d_b2_gradient;
 
-			cudaMalloc((void **)&d_w1_gradient, network->input_size * network->hidden_size * sizeof(double));
-			cudaMalloc((void **)&d_w2_gradient, network->hidden_size * network->output_size * sizeof(double));
-			cudaMalloc((void **)&d_b1_gradient, network->hidden_size * sizeof(double));
-			cudaMalloc((void **)&d_b2_gradient, network->output_size * sizeof(double));
+			cudaMalloc(reinterpret_cast<void**>(&d_w1_gradient),
+			           network->input_size * network->hidden_size * sizeof(double));
+			cudaMalloc(reinterpret_cast<void**>(&d_w2_gradient),
+			           network->hidden_size * network->output_size * sizeof(double));
+			cudaMalloc(reinterpret_cast<void**>(&d_b1_gradient), network->hidden_size * sizeof(double));
+			cudaMalloc(reinterpret_cast<void**>(&d_b2_gradient), network->output_size * sizeof(double));
 
 			// init gradients to zero
 			cudaMemset(d_w1_gradient, 0, network->input_size * network->hidden_size * sizeof(double));
@@ -129,44 +132,40 @@ void train(mlp *network, double **inputs, double **labels, int num_samples, doub
 			cudaMemset(d_b2_gradient, 0, network->output_size * sizeof(double));
 
 			// weights to gpu
-			cudaMemcpy(d_w1_gradient, network->w1, network->input_size * sizeof(double *), cudaMemcpyHostToDevice);
-			cudaMemcpy(d_w2_gradient, network->w2, network->hidden_size * sizeof(double *), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_w1_gradient, network->w1, network->input_size * sizeof(double*), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_w2_gradient, network->w2, network->hidden_size * sizeof(double*), cudaMemcpyHostToDevice);
 
 			for (int sample = batch; sample < end; sample++)
 			{
-				const double *input = inputs[sample];
-				const double *target = labels[sample];
+				const double* input = inputs[sample];
+				const double* target = labels[sample];
 
-				forward_kernel<<<network->hidden_size / 256 + 1, 256>>>(network->input_size, network->hidden_size,
-																		network->output_size, input, d_w1, d_w2,
-																		d_b1, d_b2, d_hidden, d_output);
+				forward_kernel << <network->hidden_size / 256 + 1, 256 >> >(network->input_size, network->hidden_size,
+				                                                            network->output_size, input, d_w1, d_w2,
+				                                                            d_b1, d_b2, d_hidden, d_output);
 				cudaDeviceSynchronize();
 
-				backward_kernel<<<network->hidden_size / 256 + 1, 256>>>(network->input_size, network->hidden_size,
-																		 network->output_size, input, target, d_w1,
-																		 d_w2, d_b1, d_b2, d_hidden, d_output,
-																		 d_w1_gradient, d_w2_gradient,
-																		 d_b1_gradient, d_b2_gradient);
+				backward_kernel << <network->hidden_size / 256 + 1, 256 >> >(network->input_size, network->hidden_size,
+				                                                             network->output_size, input, target, d_w1,
+				                                                             d_w2, d_b1, d_b2, d_hidden, d_output,
+				                                                             d_w1_gradient, d_w2_gradient,
+				                                                             d_b1_gradient, d_b2_gradient);
 				cudaDeviceSynchronize();
 			}
 
 			const double factor = learning_rate / static_cast<double>(batch_size);
 			for (int i = 0; i < network->input_size; i++)
 			{
-				cudaMemcpy(network->w1[i], d_w1, network->hidden_size * sizeof(double), cudaMemcpyDeviceToHost);
-				for (int j = 0; j < network->hidden_size; j++)
-				{
-					network->w1[i][j] -= factor * d_w1_gradient[i * network->hidden_size + j];
-				}
+				cudaMemcpy(network->w1[i], &d_w1[i * network->hidden_size], network->hidden_size * sizeof(double),
+				           cudaMemcpyDeviceToHost);
 			}
+
 			for (int i = 0; i < network->hidden_size; i++)
 			{
-				cudaMemcpy(network->w2[i], d_w2, network->output_size * sizeof(double), cudaMemcpyDeviceToHost);
-				for (int j = 0; j < network->output_size; j++)
-				{
-					network->w2[i][j] -= factor * d_w2_gradient[i * network->output_size + j];
-				}
+				cudaMemcpy(network->w2[i], &d_w2[i * network->output_size], network->output_size * sizeof(double),
+				           cudaMemcpyDeviceToHost);
 			}
+
 			cudaMemcpy(network->b1, d_b1, network->hidden_size * sizeof(double), cudaMemcpyDeviceToHost);
 			cudaMemcpy(network->b2, d_b2, network->output_size * sizeof(double), cudaMemcpyDeviceToHost);
 
@@ -194,36 +193,36 @@ void train(mlp *network, double **inputs, double **labels, int num_samples, doub
 	// printf("training done in %f s\n", omp_get_wtime() - epochs_dt);
 }
 
-mlp *create_mlp(int input_size, int hidden_size, int output_size)
+mlp* create_mlp(const int input_size, const int hidden_size, const int output_size)
 {
-	mlp *network = static_cast<mlp *>(malloc(sizeof(mlp)));
+	const auto network = static_cast<mlp*>(malloc(sizeof(mlp)));
 	network->input_size = input_size;
 	network->hidden_size = hidden_size;
 	network->output_size = output_size;
 
-	network->w1 = static_cast<double **>(malloc(input_size * sizeof(double *)));
-	network->w2 = static_cast<double **>(malloc(hidden_size * sizeof(double *)));
-	network->b1 = static_cast<double *>(malloc(hidden_size * sizeof(double)));
-	network->b2 = static_cast<double *>(malloc(output_size * sizeof(double)));
+	network->w1 = static_cast<double**>(malloc(input_size * sizeof(double*)));
+	network->w2 = static_cast<double**>(malloc(hidden_size * sizeof(double*)));
+	network->b1 = static_cast<double*>(malloc(hidden_size * sizeof(double)));
+	network->b2 = static_cast<double*>(malloc(output_size * sizeof(double)));
 
-	network->hidden = static_cast<double *>(malloc(hidden_size * sizeof(double)));
-	network->output = static_cast<double *>(malloc(output_size * sizeof(double)));
+	network->hidden = static_cast<double*>(malloc(hidden_size * sizeof(double)));
+	network->output = static_cast<double*>(malloc(output_size * sizeof(double)));
 
 	for (int i = 0; i < input_size; i++)
 	{
-		network->w1[i] = static_cast<double *>(malloc(hidden_size * sizeof(double)));
+		network->w1[i] = static_cast<double*>(malloc(hidden_size * sizeof(double)));
 	}
 
 	for (int i = 0; i < hidden_size; i++)
 	{
-		network->w2[i] = static_cast<double *>(malloc(output_size * sizeof(double)));
+		network->w2[i] = static_cast<double*>(malloc(output_size * sizeof(double)));
 	}
 
 	for (int i = 0; i < input_size; i++)
 	{
 		for (int j = 0; j < hidden_size; j++)
 		{
-			network->w1[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
+			network->w1[i][j] = (static_cast<double>(rand()) / RAND_MAX) * 2 - 1;
 		}
 	}
 
@@ -231,7 +230,7 @@ mlp *create_mlp(int input_size, int hidden_size, int output_size)
 	{
 		for (int j = 0; j < output_size; j++)
 		{
-			network->w2[i][j] = ((double)rand() / RAND_MAX) * 2 - 1;
+			network->w2[i][j] = (static_cast<double>(rand()) / RAND_MAX) * 2 - 1;
 		}
 	}
 
@@ -248,7 +247,7 @@ mlp *create_mlp(int input_size, int hidden_size, int output_size)
 	return network;
 }
 
-void free_network(mlp *network)
+void free_network(mlp* network)
 {
 	for (int i = 0; i < network->input_size; i++)
 	{

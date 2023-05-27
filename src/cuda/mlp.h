@@ -26,10 +26,10 @@ typedef struct
 
 mlp *create_mlp(int input_size, int hidden_size, int output_size);
 void free_network(mlp *network);
-void train(mlp *network, double **inputs, double **labels, int num_samples, double learning_rate,
-		   int epochs, int batch_size);
+void train(const mlp *network, double **inputs, double **labels, int num_samples, double learning_rate,
+           int epochs, int batch_size);
 
-__device__ double atomicAddDouble(double *address, double val);
+__device__ double atomic_add_double(double *address, double val);
 __device__ double activation(const double x);
 __device__ double activation_derivative(const double x);
 
