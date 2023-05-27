@@ -10,6 +10,15 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\cuda\mlp.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="src\cuda\mlp.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\cuda\main.c" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6521F57B-0C19-4D50-89F3-77675F5BCC71}</ProjectGuid>
     <RootNamespace>MultilayerPerceptrons</RootNamespace>
@@ -79,13 +88,6 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
     </CudaCompile>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="src\serial\main.c" />
-    <ClCompile Include="src\serial\mlp.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="src\serial\mlp.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.1.targets" />
