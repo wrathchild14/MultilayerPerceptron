@@ -1,4 +1,4 @@
-#include "mlp.h"
+#include "../serial/mlp.h"
 
 mlp* create_mlp(const int input_size, const int hidden_size, const int output_size)
 {
