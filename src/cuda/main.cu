@@ -96,8 +96,8 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 		int row = idx / hidden_size;
 		int col = idx % hidden_size;
 		// d_W1[idx] -= eta * d_W1g[idx];
-		int weightIdx = row * hidden_size + col; // Compute the index for accessing weights
-		d_W1[weightIdx] -= eta * d_W1g[weightIdx];
+		int weight_idx = row * hidden_size + col;
+		d_W1[weight_idx] -= eta * d_W1g[weight_idx];
 	}
 
 	if (idx < hidden_size)
@@ -110,8 +110,8 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 		int row = idx / output_size;
 		int col = idx % output_size;
 		// d_W2[idx] -= eta * d_W2g[idx];
-		int weightIdx = row * output_size + col; // Compute the index for accessing weights
-		d_W2[weightIdx] -= eta * d_W2g[weightIdx];
+		int weight_idx = row * output_size + col;
+		d_W2[weight_idx] -= eta * d_W2g[weight_idx];
 	}
 
 	if (idx < output_size)
@@ -120,62 +120,19 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 	}
 }
 
-
 int main()
 {
-	int INPUT_COLS = INPUT_SIZE;
-	int OUTPUT_COLS = OUTPUT_SIZE;
-	int ROWS = 1000;
+	const int INPUT_COLS = INPUT_SIZE;
+	const int OUTPUT_COLS = OUTPUT_SIZE;
+	const int ROWS = DATA_ROWS;
 
-	auto data = static_cast<double**>(malloc(ROWS * sizeof(double*)));
-	for (int i = 0; i < ROWS; i++)
-	{
-		data[i] = static_cast<double*>(malloc((INPUT_COLS + OUTPUT_COLS) * sizeof(double)));
-	}
+	float* input_data;
+	float* output_data;
 
-	auto input_data = static_cast<float*>(malloc(INPUT_COLS * ROWS * sizeof(float)));
-	auto output_data = static_cast<float*>(malloc(OUTPUT_COLS * ROWS * sizeof(float)));
-
-	FILE* file = fopen(DATA_PATH, "r");
-
-	if (file == nullptr)
-	{
-		printf("ERROR: failed to open the file.\n");
-		return 1;
-	}
-
-	// read data from the file
-	for (int i = 0; i < ROWS; i++)
-	{
-		for (int j = 0; j < INPUT_COLS + OUTPUT_COLS; j++)
-		{
-			if (fscanf(file, "%lf,", &data[i][j]) != 1)
-			{
-				printf("ERROR: failed to read data from the file.\n");
-				fclose(file);
-				return 1;
-			}
-		}
-	}
-
-	fclose(file);
-
-	// fill input and output data
-	for (int i = 0; i < ROWS; i++)
-	{
-		for (int j = 0; j < INPUT_COLS; j++)
-		{
-			input_data[i * INPUT_COLS + j] = static_cast<float>(data[i][j]);
-		}
-
-		for (int j = 0; j < OUTPUT_COLS; j++)
-		{
-			output_data[i * OUTPUT_COLS + j] = static_cast<float>(data[i][INPUT_COLS + j]);
-		}
-	}
+	if (!load_data(DATA_PATH, INPUT_COLS, OUTPUT_COLS, ROWS, input_data, output_data)) return 1;
 
 	// int num_samples = sizeof(inputData) / (sizeof(float) * INPUT_SIZE);
-	int num_samples = ROWS;
+	const int num_samples = ROWS;
 	printf("samples: %d\n", num_samples);
 
 	float* d_input_data;
