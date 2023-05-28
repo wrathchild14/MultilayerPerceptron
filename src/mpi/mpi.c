@@ -139,14 +139,18 @@ void mpi_backward(const mlp* network, const double* input, const double* target,
 	double* hidden_error = malloc(network->hidden_size * sizeof(double));
 
 	// output error terms
-	for (int i = 0; i < network->output_size; i++)
+	double chunk_size = network->output_size / num_process;
+	double start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		const double output = network->output[i];
 		output_error[i] = (output - target[i]) * activation_derivative(output);
 	}
 
 	// hidden error terms
-	for (int i = 0; i < network->hidden_size; i++)
+	chunk_size = network->hidden_size / num_process;
+	start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		double error = 0;
 		for (int j = 0; j < network->output_size; j++)
@@ -157,25 +161,36 @@ void mpi_backward(const mlp* network, const double* input, const double* target,
 	}
 
 	// weights and biases
-	for (int i = 0; i < network->input_size; i++)
+	chunk_size = network->input_size / num_process;
+	start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		for (int j = 0; j < network->hidden_size; j++)
 		{
 			network->w1[i][j] -= learning_rate * hidden_error[j] * input[i];
 		}
 	}
-	for (int i = 0; i < network->hidden_size; i++)
+
+	chunk_size = network->hidden_size / num_process;
+	start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		for (int j = 0; j < network->output_size; j++)
 		{
 			network->w2[i][j] -= learning_rate * output_error[j] * network->hidden[i];
 		}
 	}
-	for (int i = 0; i < network->hidden_size; i++)
+
+	chunk_size = network->hidden_size / num_process;
+	start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		network->b1[i] -= learning_rate * hidden_error[i];
 	}
-	for (int i = 0; i < network->output_size; i++)
+
+	chunk_size = network->output_size / num_process;
+	start = chunk_size*rank;
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		network->b2[i] -= learning_rate * output_error[i];
 	}
