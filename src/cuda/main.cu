@@ -4,6 +4,8 @@
 
 #include <cuda_runtime.h>
 
+#include "utils.h"
+
 #define DEBUG 1
 
 enum
@@ -16,7 +18,7 @@ enum
 	EPOCHS = 1000,
 };
 
-char const* DATA_PATH = "data/random_data.txt";
+const char* DATA_PATH = "data/random_data.txt";
 constexpr float LR = 0.001f;
 
 __global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size)
@@ -93,7 +95,9 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 	{
 		int row = idx / hidden_size;
 		int col = idx % hidden_size;
-		d_W1[idx] -= eta * d_W1g[idx];
+		// d_W1[idx] -= eta * d_W1g[idx];
+		int weightIdx = row * hidden_size + col; // Compute the index for accessing weights
+		d_W1[weightIdx] -= eta * d_W1g[weightIdx];
 	}
 
 	if (idx < hidden_size)
@@ -105,7 +109,9 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 	{
 		int row = idx / output_size;
 		int col = idx % output_size;
-		d_W2[idx] -= eta * d_W2g[idx];
+		// d_W2[idx] -= eta * d_W2g[idx];
+		int weightIdx = row * output_size + col; // Compute the index for accessing weights
+		d_W2[weightIdx] -= eta * d_W2g[weightIdx];
 	}
 
 	if (idx < output_size)
@@ -190,29 +196,17 @@ int main()
 	cudaMalloc(reinterpret_cast<void**>(&d_b2), OUTPUT_SIZE * sizeof(float));
 
 	// init weights and biases
-	float W1[INPUT_SIZE][HIDDEN_SIZE] = {
-		{0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f},
-		{0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f},
-		{0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f},
-		{0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f}
-	};
-	float b1[HIDDEN_SIZE] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
-	float W2[HIDDEN_SIZE][OUTPUT_SIZE] = {
-		{0.1f, 0.2f, 0.3f},
-		{0.2f, 0.3f, 0.4f},
-		{0.3f, 0.4f, 0.5f},
-		{0.4f, 0.5f, 0.6f},
-		{0.5f, 0.6f, 0.7f},
-		{0.6f, 0.7f, 0.8f},
-		{0.7f, 0.8f, 0.9f},
-		{0.8f, 0.9f, 1.0f}
-	};
-	float b2[OUTPUT_SIZE] = {0.1f, 0.2f, 0.3f};
+	auto w1 = static_cast<float*>(malloc(sizeof(float) * INPUT_SIZE * HIDDEN_SIZE));
+	auto b1 = static_cast<float*>(malloc(sizeof(float) * HIDDEN_SIZE));
+	auto w2 = static_cast<float*>(malloc(sizeof(float) * HIDDEN_SIZE * OUTPUT_SIZE));
+	auto b2 = static_cast<float*>(malloc(sizeof(float) * OUTPUT_SIZE));
+	initialize_randomlly(w1, b1, INPUT_SIZE, HIDDEN_SIZE);
+	initialize_randomlly(w2, b2, HIDDEN_SIZE, OUTPUT_SIZE);
 
 	// copy w and b to device
-	cudaMemcpy(d_W1, W1, INPUT_SIZE * HIDDEN_SIZE * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_W1, w1, INPUT_SIZE * HIDDEN_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_b1, b1, HIDDEN_SIZE * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_W2, W2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_W2, w2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_b2, b2, OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 
 
@@ -287,43 +281,43 @@ int main()
 	}
 
 	// w and b to host
-	cudaMemcpy(W1, d_W1, INPUT_SIZE * HIDDEN_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(w1, d_W1, INPUT_SIZE * HIDDEN_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy(b1, d_b1, HIDDEN_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-	cudaMemcpy(W2, d_W2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(w2, d_W2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy(b2, d_b2, OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 
 #ifdef DEBUG
 	printf("updated W1:\n");
-	for (const auto& i : W1)
+	for (int i = 0; i < INPUT_SIZE; i++)
 	{
-		for (const float j : i)
+		for (int j = 0; j < HIDDEN_SIZE; j++)
 		{
-			printf("%f ", j);
+			printf("%f ", w1[i * HIDDEN_SIZE + j]);
 		}
 		printf("\n");
 	}
 
 	printf("updated b1:\n");
-	for (const float i : b1)
+	for (int i = 0; i < HIDDEN_SIZE; i++)
 	{
-		printf("%f ", i);
+		printf("%f ", b1[i]);
 	}
 	printf("\n");
 
 	printf("updated W2:\n");
-	for (const auto& i : W2)
+	for (int i = 0; i < HIDDEN_SIZE; i++)
 	{
-		for (const float j : i)
+		for (int j = 0; j < OUTPUT_SIZE; j++)
 		{
-			printf("%f ", j);
+			printf("%f ", w2[i * OUTPUT_SIZE + j]);
 		}
 		printf("\n");
 	}
 
 	printf("updated b2:\n");
-	for (const float i : b2)
+	for (int i = 0; i < OUTPUT_SIZE; i++)
 	{
-		printf("%f ", i);
+		printf("%f ", b2[i]);
 	}
 	printf("\n");
 #endif
