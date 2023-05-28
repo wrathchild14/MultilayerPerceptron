@@ -1,8 +1,7 @@
 #pragma once
-#include <cstdlib>
 #include <ctime>
 
-inline void initialize_randomlly(float* weights, float* biases, int input_size, int output_size)
+inline void initialize_randomlly(float* weights, float* biases, const int input_size, const int output_size)
 {
 	srand(time(nullptr));
 

@@ -6,7 +6,8 @@
 
 #include "utils.h"
 
-#define DEBUG 1
+// debug printing option
+#define DEBUG
 
 enum
 {
@@ -14,12 +15,12 @@ enum
 	HIDDEN_SIZE = 8,
 	OUTPUT_SIZE = 3,
 	DATA_ROWS = 1000,
-	BATCH_SIZE = 128,
-	EPOCHS = 1000,
+	BATCH_SIZE = 64,
+	EPOCHS = 10000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
-constexpr float LR = 0.001f;
+constexpr float LR = 0.0002f; // 2e-4
 
 __global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size)
 {
@@ -166,7 +167,6 @@ int main()
 	cudaMemcpy(d_W2, w2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_b2, b2, OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 
-
 	// block and grid dim for kernels
 	dim3 block_size(256);
 	dim3 grid_size((num_samples + block_size.x - 1) / block_size.x);
@@ -229,12 +229,31 @@ int main()
 			                                                     d_hidden_layer_output, d_output_layer_error,
 			                                                     LR, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
 
+			// loss for the current batch (todo: improve?)
+			float* d_loss;
+			cudaMalloc(reinterpret_cast<void**>(&d_loss), BATCH_SIZE * OUTPUT_SIZE * sizeof(float));
+			calculate_loss << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
+			                                              d_loss, BATCH_SIZE * OUTPUT_SIZE);
+
+			// to host
+			auto* loss = static_cast<float*>(malloc(BATCH_SIZE * OUTPUT_SIZE * sizeof(float)));
+			cudaMemcpy(loss, d_loss, BATCH_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+
+			// accumulate loss for current batch
+			for (int j = 0; j < BATCH_SIZE * OUTPUT_SIZE; j++)
+			{
+				total_loss += loss[j];
+			}
+
+			cudaFree(d_loss);
 			cudaFree(d_hidden_layer_output);
 			cudaFree(d_output_layer_output);
 			cudaFree(d_output_layer_error);
 			cudaFree(d_hidden_layer_error);
 		}
-		printf("Epoch %d: Loss = %f\n", epoch + 1, total_loss);
+#ifdef DEBUG
+		printf("Epoch %d: MSE Loss = %f\n", epoch + 1, total_loss / num_samples);
+#endif
 	}
 
 	// w and b to host
