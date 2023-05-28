@@ -16,7 +16,7 @@ enum
 	OUTPUT_SIZE = 3,
 	DATA_ROWS = 1000,
 	BATCH_SIZE = 64,
-	EPOCHS = 10000,
+	EPOCHS = 1000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
@@ -134,7 +134,8 @@ int main()
 
 	// int num_samples = sizeof(inputData) / (sizeof(float) * INPUT_SIZE);
 	const int num_samples = ROWS;
-	printf("samples: %d\n", num_samples);
+	printf("log: network with samples:%d batch_size:%d epochs:%d learning_rate:%f\n", num_samples, BATCH_SIZE,
+	       EPOCHS, LR);
 
 	float* d_input_data;
 	float* d_output_data;
@@ -170,6 +171,11 @@ int main()
 	// block and grid dim for kernels
 	dim3 block_size(256);
 	dim3 grid_size((num_samples + block_size.x - 1) / block_size.x);
+
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, nullptr);
 
 	for (int epoch = 0; epoch < EPOCHS; epoch++)
 	{
@@ -296,7 +302,19 @@ int main()
 		printf("%f ", b2[i]);
 	}
 	printf("\n");
+
 #endif
+
+	cudaEventRecord(stop, nullptr);
+	cudaEventSynchronize(stop);
+
+	float elapsed_time;
+	cudaEventElapsedTime(&elapsed_time, start, stop);
+	printf("Elapsed Time: %f s\n", elapsed_time/1000);
+	// printf("Elapsed Time: %.3f ms\n", elapsed_time);
+
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
 
 	cudaFree(d_input_data);
 	cudaFree(d_output_data);

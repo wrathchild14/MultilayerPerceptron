@@ -37,9 +37,9 @@ int main(void)
 	const int output_size = 3;
 	const int hidden_size = 10;
 	const int num_samples = 1000;
-	const int batch_size = 64;
-	const int epochs = 100;
-	const double learning_rate = 0.001;
+	const int batch_size = 256;
+	const int epochs = 10000;
+	const double learning_rate = 0.002;
 
 	double** inputs = malloc(num_samples * sizeof(double*));
 	double** labels = malloc(num_samples * sizeof(double*));
