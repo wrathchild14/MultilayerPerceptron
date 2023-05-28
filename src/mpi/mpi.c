@@ -1,4 +1,5 @@
 #include "../serial/mlp.h"
+#include "/usr/include/openmpi-x86_64/mpi.h"
 
 mlp* create_mlp(const int input_size, const int hidden_size, const int output_size)
 {
@@ -86,10 +87,13 @@ double activation_derivative(const double x)
 	return 1 - pow(tanh(x), 2);
 }
 
-void forward(mlp* network, const double* input)
+void mpi_forward(mlp* network, const double* input, int rank, int num_process)
 {
 	// hidden layer
-	for (int i = 0; i < network->hidden_size; i++)
+	double chunk_size = network->hidden_size / num_process;
+	double start = chunk_size*rank;
+
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		double sum = 0;
 		for (int j = 0; j < network->input_size; j++)
@@ -99,8 +103,12 @@ void forward(mlp* network, const double* input)
 		network->hidden[i] = activation(sum + network->b1[i]);
 	}
 
+
 	// output layer
-	for (int i = 0; i < network->output_size; i++)
+	chunk_size = network->output_size / num_process;
+	start = chunk_size*rank;
+
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		double sum = 0;
 		for (int j = 0; j < network->hidden_size; j++)
@@ -111,7 +119,10 @@ void forward(mlp* network, const double* input)
 	}
 
 	network->loss = 0;
-	for (int i = 0; i < network->output_size; i++)
+	chunk_size = network->output_size / num_process;
+	start = chunk_size*rank;
+
+	for (int i = start; i < start + chunk_size; i++)
 	{
 		const double output = network->output[i];
 		const double target = input[i];
@@ -121,7 +132,7 @@ void forward(mlp* network, const double* input)
 }
 
 
-void backward(const mlp* network, const double* input, const double* target, const double learning_rate)
+void mpi_backward(const mlp* network, const double* input, const double* target, const double learning_rate, int rank, int num_process)
 {
 	// memory for error terms
 	double* output_error = malloc(network->output_size * sizeof(double));
@@ -173,9 +184,28 @@ void backward(const mlp* network, const double* input, const double* target, con
 	free(hidden_error);
 }
 
-void train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
-           const int epochs, const int batch_size)
+void mpi_train(mlp* network, double** inputs, double** labels, const int num_samples, const double learning_rate,
+           const int epochs, const int batch_size, int argc, char *argv[])
 {
+	int rank; // process id
+	int num_process; // total number of processes 
+	int source; // sender rank
+	int destination; // receiver rank 
+	int tag = 0; // message tag 
+	char message_buffer[100]; // message buffer 
+	MPI_Status status; // message status 
+	char node_name[MPI_MAX_PROCESSOR_NAME]; //node name
+	int name_len; //true length of node name
+    
+	// initialize MPI 
+	MPI_Init(&argc, &argv);
+	// get number of processes
+	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
+	// get process id 
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	// get node name
+	MPI_Get_processor_name(node_name, &name_len );
+
 	const double epochs_dt = MPI_Wtime();
 	for (int epoch = 0; epoch < epochs; epoch++)
 	{
@@ -192,8 +222,8 @@ void train(mlp* network, double** inputs, double** labels, const int num_samples
 				const double* input = inputs[sample];
 				const double* target = labels[sample];
 
-				forward(network, input);
-				backward(network, input, target, learning_rate);
+				mpi_forward(network, input, rank, num_process);
+				mpi_backward(network, input, target, learning_rate, rank, num_process);
 			}
 		}
 
