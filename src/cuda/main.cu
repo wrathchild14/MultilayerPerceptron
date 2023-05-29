@@ -131,7 +131,6 @@ int main(int argc, char* argv[])
 	const int INPUT_COLS = INPUT_SIZE;
 	const int OUTPUT_COLS = OUTPUT_SIZE;
 
-	float total_loss;
 	// handle input/output data
 	float* input_data;
 	float* output_data;
@@ -181,6 +180,9 @@ int main(int argc, char* argv[])
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	cudaEventRecord(start, nullptr);
+
+	float total_loss;
+	const auto loss = static_cast<float*>(malloc(BATCH_SIZE * OUTPUT_SIZE * sizeof(float)));
 
 	for (int epoch = 0; epoch < EPOCHS; epoch++)
 	{
@@ -248,7 +250,6 @@ int main(int argc, char* argv[])
 			                                              d_loss, BATCH_SIZE * OUTPUT_SIZE);
 
 			// to host
-			auto* loss = static_cast<float*>(malloc(BATCH_SIZE * OUTPUT_SIZE * sizeof(float)));
 			cudaMemcpy(loss, d_loss, BATCH_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 
 			// accumulate loss for current batch
@@ -321,6 +322,8 @@ int main(int argc, char* argv[])
 
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
+
+	free(loss);
 
 	cudaFree(d_input_data);
 	cudaFree(d_output_data);
