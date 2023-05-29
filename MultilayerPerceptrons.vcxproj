@@ -16,6 +16,9 @@
   <ItemGroup>
     <ClInclude Include="src\cuda\utils.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include=".plan" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6521F57B-0C19-4D50-89F3-77675F5BCC71}</ProjectGuid>
     <RootNamespace>MultilayerPerceptrons</RootNamespace>

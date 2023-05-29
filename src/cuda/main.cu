@@ -15,12 +15,12 @@ enum
 	HIDDEN_SIZE = 8,
 	OUTPUT_SIZE = 3,
 	DATA_ROWS = 1000,
-	BATCH_SIZE = 64,
-	EPOCHS = 1000,
+	BATCH_SIZE_ENUM = 64,
+	EPOCHS_ENUM = 500,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
-constexpr float LR = 0.0002f; // 2e-4
+constexpr double LR = 0.0002; // 2e-4
 
 __global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size)
 {
@@ -123,8 +123,8 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 
 int main(int argc, char* argv[])
 {
-	int BATCH_SIZE = 32;
-	int EPOCHS = 1000;
+	int BATCH_SIZE = BATCH_SIZE_ENUM;
+	int EPOCHS = EPOCHS_ENUM;
 
 	parse_arguments(argc, argv, BATCH_SIZE, EPOCHS);
 
