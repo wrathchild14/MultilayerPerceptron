@@ -121,8 +121,13 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 	}
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+	int BATCH_SIZE = 32;
+	int EPOCHS = 1000;
+
+	parse_arguments(argc, argv, BATCH_SIZE, EPOCHS);
+
 	const int INPUT_COLS = INPUT_SIZE;
 	const int OUTPUT_COLS = OUTPUT_SIZE;
 	const int ROWS = DATA_ROWS;

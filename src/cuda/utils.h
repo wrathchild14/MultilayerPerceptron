@@ -1,5 +1,6 @@
 #pragma once
 #include <ctime>
+#include <string>
 
 inline void initialize_randomlly(float* weights, float* biases, const int input_size, const int output_size)
 {
@@ -66,4 +67,32 @@ inline bool load_data(const char* data_path, const int input_cols, const int out
 		}
 	}
 	return true;
+}
+
+inline void parse_arguments(const int argc, char* argv[], int& batch_size, int& epochs)
+{
+	for (int i = 1; i < argc; ++i)
+	{
+		std::string arg(argv[i]);
+		if (arg == "--batch-size")
+		{
+			if (i + 1 < argc)
+				batch_size = std::atoi(argv[i + 1]);
+			else
+			{
+				printf("error: --batch-size requires an argument\n");
+				exit(1);
+			}
+		}
+		else if (arg == "--epochs")
+		{
+			if (i + 1 < argc)
+				epochs = std::atoi(argv[i + 1]);
+			else
+			{
+				printf("error: --epochs requires an argument\n");
+				exit(1);
+			}
+		}
+	}
 }
