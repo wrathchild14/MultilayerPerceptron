@@ -11,8 +11,8 @@ def generate_training_data(file_path, input_size, output_size, num_samples):
             file.write(f"{input_values},{label_values}\n")
 
 file_path = "random_data.txt"
-input_size = 4
-output_size = 3
-num_samples = 1000
+input_size = 12
+output_size = 8
+num_samples = 5000
 
 generate_training_data(file_path, input_size, output_size, num_samples)

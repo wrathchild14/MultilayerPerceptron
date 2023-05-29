@@ -7,20 +7,20 @@
 #include "utils.h"
 
 // debug printing option
-#define DEBUG
+// #define DEBUG
 
 enum
 {
-	INPUT_SIZE = 4,
-	HIDDEN_SIZE = 8,
-	OUTPUT_SIZE = 3,
-	DATA_ROWS = 1000,
-	BATCH_SIZE_ENUM = 64,
-	EPOCHS_ENUM = 500,
+	INPUT_SIZE = 12,
+	HIDDEN_SIZE = 20,
+	OUTPUT_SIZE = 8,
+	DATA_ROWS = 5000,
+	BATCH_SIZE_ENUM = 128,
+	EPOCHS_ENUM = 1000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
-constexpr double LR = 0.0002; // 2e-4
+constexpr double LR = 0.00002; // 2e-5
 
 __global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size)
 {
@@ -130,25 +130,25 @@ int main(int argc, char* argv[])
 
 	const int INPUT_COLS = INPUT_SIZE;
 	const int OUTPUT_COLS = OUTPUT_SIZE;
-	const int ROWS = DATA_ROWS;
 
+	float total_loss;
+	// handle input/output data
 	float* input_data;
 	float* output_data;
 
-	if (!load_data(DATA_PATH, INPUT_COLS, OUTPUT_COLS, ROWS, input_data, output_data)) return 1;
+	if (!load_data(DATA_PATH, INPUT_COLS, OUTPUT_COLS, DATA_ROWS, input_data, output_data)) return 1;
 
 	// int num_samples = sizeof(inputData) / (sizeof(float) * INPUT_SIZE);
-	const int num_samples = ROWS;
-	printf("log: network with samples:%d batch_size:%d epochs:%d learning_rate:%f\n", num_samples, BATCH_SIZE,
+	printf("log: network with data_rows:%d batch_size:%d epochs:%d learning_rate:%f\n", DATA_ROWS, BATCH_SIZE,
 	       EPOCHS, LR);
 
 	float* d_input_data;
 	float* d_output_data;
-	cudaMalloc(reinterpret_cast<void**>(&d_input_data), num_samples * INPUT_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_output_data), num_samples * OUTPUT_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_input_data), DATA_ROWS * INPUT_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_output_data), DATA_ROWS * OUTPUT_SIZE * sizeof(float));
 
-	cudaMemcpy(d_input_data, input_data, num_samples * INPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_output_data, output_data, num_samples * OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_input_data, input_data, DATA_ROWS * INPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_output_data, output_data, DATA_ROWS * OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 
 	float* d_W1;
 	float* d_b1;
@@ -174,8 +174,8 @@ int main(int argc, char* argv[])
 	cudaMemcpy(d_b2, b2, OUTPUT_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 
 	// block and grid dim for kernels
-	dim3 block_size(256);
-	dim3 grid_size((num_samples + block_size.x - 1) / block_size.x);
+	dim3 block_size(BATCH_SIZE);
+	dim3 grid_size((DATA_ROWS + block_size.x - 1) / block_size.x);
 
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -184,8 +184,9 @@ int main(int argc, char* argv[])
 
 	for (int epoch = 0; epoch < EPOCHS; epoch++)
 	{
-		float total_loss = 0.0f; // accumulation loss for epoch
-		for (int i = 0; i < num_samples; i += BATCH_SIZE)
+		total_loss = 0.0f;
+#pragma omp parallel for reduction(+:total_loss)
+		for (int i = 0; i < DATA_ROWS; i += BATCH_SIZE)
 		{
 			// Forward pass ------
 			// device memory for hidden layer
@@ -263,7 +264,7 @@ int main(int argc, char* argv[])
 			cudaFree(d_hidden_layer_error);
 		}
 #ifdef DEBUG
-		printf("Epoch %d: MSE Loss = %f\n", epoch + 1, total_loss / num_samples);
+		printf("Epoch %d: MSE Loss = %f\n", epoch + 1, total_loss / DATA_ROWS);
 #endif
 	}
 
@@ -315,8 +316,8 @@ int main(int argc, char* argv[])
 
 	float elapsed_time;
 	cudaEventElapsedTime(&elapsed_time, start, stop);
-	printf("Elapsed Time: %f s\n", elapsed_time/1000);
-	// printf("Elapsed Time: %.3f ms\n", elapsed_time);
+	printf("Elapsed Time: %f s with loss: %f\n", elapsed_time / 1000, total_loss / DATA_ROWS);
+	// printf("Elapsed Time: %.3f ms with loss: %f\n", elapsed_time, total_loss / DATA_ROWS);
 
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
