@@ -15,8 +15,8 @@ enum
 	HIDDEN_SIZE = 20,
 	OUTPUT_SIZE = 8,
 	DATA_ROWS = 5000,
-	BATCH_SIZE_ENUM = 1024,
-	EPOCHS_ENUM = 5000,
+	BATCH_SIZE_ENUM = 256,
+	EPOCHS_ENUM = 1000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";

@@ -33,22 +33,16 @@ __global__ void calculate_loss(float* d_output_layer_output, float* d_output_dat
 	}
 }
 
-__global__ void tanh_activation(float* d_input, int size)
+__global__ void activation_and_derivative(float* d_input, int size, bool derivative = false)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid < size)
 	{
-		d_input[tid] = tanhf(d_input[tid]);
-	}
-}
-
-__global__ void tanh_derivative(float* d_input, int size)
-{
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid < size)
-	{
-		float tanh_val = tanhf(d_input[tid]);
-		d_input[tid] = 1.0f - tanh_val * tanh_val;
+		float val = tanhf(d_input[tid]);
+		if (derivative)
+			d_input[tid] = 1.0f - val * val;
+		else
+			d_input[tid] = val;
 	}
 }
 
@@ -69,30 +63,17 @@ __global__ void matrix_multiply(float* d_A, float* d_B, float* d_C, int m, int n
 	}
 }
 
-__global__ void element_wise_add(float* d_A, float* d_B, float* d_C, int size)
+__global__ void element_wise_operation(float* d_A, float* d_B, float* d_C, int size, int operation)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid < size)
 	{
-		d_C[tid] = d_A[tid] + d_B[tid];
-	}
-}
-
-__global__ void element_wise_subtract(float* d_A, float* d_B, float* d_C, int size)
-{
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid < size)
-	{
-		d_C[tid] = d_A[tid] - d_B[tid];
-	}
-}
-
-__global__ void element_wise_multiply(float* d_A, float* d_B, float* d_C, int size)
-{
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid < size)
-	{
-		d_C[tid] = d_A[tid] * d_B[tid];
+		if (operation == 0) // Addition
+			d_C[tid] = d_A[tid] + d_B[tid];
+		else if (operation == 1) // Subtraction
+			d_C[tid] = d_A[tid] - d_B[tid];
+		else if (operation == 2) // Multiplication
+			d_C[tid] = d_A[tid] * d_B[tid];
 	}
 }
 
@@ -207,9 +188,9 @@ int main(int argc, char* argv[])
 			// calculate hidden layer
 			matrix_multiply << <grid_size, block_size >> >(d_input_data + i * INPUT_SIZE, d_W1, d_hidden_layer_output,
 			                                               BATCH_SIZE, INPUT_SIZE, HIDDEN_SIZE);
-			element_wise_subtract << <grid_size, block_size >> >(d_hidden_layer_output, d_b1, d_hidden_layer_output,
-			                                                     BATCH_SIZE * HIDDEN_SIZE);
-			tanh_activation << <grid_size, block_size >> >(d_hidden_layer_output, BATCH_SIZE * HIDDEN_SIZE);
+			element_wise_operation << <grid_size, block_size >> >(d_hidden_layer_output, d_b1, d_hidden_layer_output,
+			                                                      BATCH_SIZE * HIDDEN_SIZE, 1);
+			activation_and_derivative << <grid_size, block_size >> >(d_hidden_layer_output, BATCH_SIZE * HIDDEN_SIZE);
 
 			// device memory for output layer
 			float* d_output_layer_output;
@@ -218,12 +199,13 @@ int main(int argc, char* argv[])
 			// calculate output layer
 			matrix_multiply << <grid_size, block_size >> >(d_hidden_layer_output, d_W2, d_output_layer_output,
 			                                               BATCH_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-			element_wise_add << <grid_size, block_size >> >(d_output_layer_output, d_b2, d_output_layer_output,
-			                                                BATCH_SIZE * OUTPUT_SIZE);
+			element_wise_operation << <grid_size, block_size >> >(d_output_layer_output, d_b2, d_output_layer_output,
+			                                                      BATCH_SIZE * OUTPUT_SIZE, 0);
 			// output - target
-			element_wise_subtract << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
-			                                                     d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
-			tanh_activation << <grid_size, block_size >> >(d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
+			element_wise_operation << <grid_size, block_size >> >(d_output_layer_output,
+			                                                      d_output_data + i * OUTPUT_SIZE,
+			                                                      d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE, 1);
+			activation_and_derivative << <grid_size, block_size >> >(d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
 
 			// loss for ------ the current batch (todo: improve?)
 			float* d_loss;
@@ -246,11 +228,13 @@ int main(int argc, char* argv[])
 			cudaMalloc(reinterpret_cast<void**>(&d_output_layer_error), BATCH_SIZE * OUTPUT_SIZE * sizeof(float));
 
 			// calculate output layer error
-			element_wise_subtract << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
-			                                                     d_output_layer_error, BATCH_SIZE * OUTPUT_SIZE);
-			tanh_derivative << <grid_size, block_size >> >(d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
-			element_wise_multiply << <grid_size, block_size >> >(d_output_layer_error, d_output_layer_output,
-			                                                     d_output_layer_error, BATCH_SIZE * OUTPUT_SIZE);
+			element_wise_operation << <grid_size, block_size >> >(d_output_layer_output,
+			                                                      d_output_data + i * OUTPUT_SIZE,
+			                                                      d_output_layer_error, BATCH_SIZE * OUTPUT_SIZE, 1);
+			activation_and_derivative << <grid_size, block_size >> >(d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE,
+			                                                         true);
+			element_wise_operation << <grid_size, block_size >> >(d_output_layer_error, d_output_layer_output,
+			                                                      d_output_layer_error, BATCH_SIZE * OUTPUT_SIZE, 2);
 
 			// device memory for hidden layer error
 			float* d_hidden_layer_error;
@@ -259,9 +243,10 @@ int main(int argc, char* argv[])
 			// calculate hidden layer error
 			matrix_multiply << <grid_size, block_size >> >(d_output_layer_error, d_W2, d_hidden_layer_error,
 			                                               BATCH_SIZE, OUTPUT_SIZE, HIDDEN_SIZE);
-			tanh_derivative << <grid_size, block_size >> >(d_hidden_layer_output, BATCH_SIZE * HIDDEN_SIZE);
-			element_wise_multiply << <grid_size, block_size >> >(d_hidden_layer_error, d_hidden_layer_output,
-			                                                     d_hidden_layer_error, BATCH_SIZE * HIDDEN_SIZE);
+			activation_and_derivative << <grid_size, block_size >> >(d_hidden_layer_output, BATCH_SIZE * HIDDEN_SIZE,
+			                                                         true);
+			element_wise_operation << <grid_size, block_size >> >(d_hidden_layer_error, d_hidden_layer_output,
+			                                                      d_hidden_layer_error, BATCH_SIZE * HIDDEN_SIZE, 2);
 
 			// update
 			update_weights_biases << <grid_size, block_size >> >(d_W1, d_b1, d_W2, d_b2,
