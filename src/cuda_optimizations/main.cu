@@ -9,7 +9,7 @@
 #include <curand_kernel.h>
 
 // debug printing option
-// #define DEBUG
+#define DEBUG
 
 enum
 {
@@ -37,72 +37,81 @@ __global__ void initialize_weights(float* weights, int size, unsigned long long 
 }
 
 __global__ void forward_pass(float* d_input_data, float* d_W1, float* d_b1, float* d_W2, float* d_b2,
-                             float* d_output_layer_output, float* d_hidden_layer_output, int size, int input_size,
-                             int hidden_size, int output_size)
+	float* d_output_layer_output, float* d_hidden_layer_output, int size, int input_size,
+	int hidden_size, int output_size, int batch_size)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = tid / hidden_size;
+	int col = tid % hidden_size;
+	int input_offset = row * input_size + col;
+	int hidden_offset = row * hidden_size + col;
+
 	if (tid < size)
 	{
 		// hidden layer
 		float sum = 0.0f;
 		for (int i = 0; i < input_size; i++)
 		{
-			sum += d_input_data[tid * input_size + i] * d_W1[i * hidden_size + threadIdx.x];
+			sum += d_input_data[i * batch_size + input_offset] * d_W1[i * hidden_size + col];
 		}
-		d_hidden_layer_output[tid * hidden_size + threadIdx.x] = tanhf(sum + d_b1[threadIdx.x]);
+		d_hidden_layer_output[hidden_offset] = tanhf(sum + d_b1[col]);
 
 		// output layer
 		sum = 0.0f;
 		for (int i = 0; i < hidden_size; i++)
 		{
-			sum += d_hidden_layer_output[tid * hidden_size + i] * d_W2[i * output_size + threadIdx.x];
+			sum += d_hidden_layer_output[i * batch_size + hidden_offset] * d_W2[i * output_size + col];
 		}
-		d_output_layer_output[tid * output_size + threadIdx.x] = sum + d_b2[threadIdx.x];
+		d_output_layer_output[hidden_offset] = sum + d_b2[col];
 	}
 }
 
 __global__ void backward_pass(float* d_output_layer_output, float* d_output_data, float* d_output_layer_error,
-                              float* d_hidden_layer_output, float* d_hidden_layer_error, int size, int hidden_size,
-                              int output_size)
+	float* d_hidden_layer_output, float* d_hidden_layer_error, int size, int hidden_size,
+	int output_size, int batch_size)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = tid / output_size;
+	int col = tid % output_size;
+	int output_offset = row * output_size + col;
+	int hidden_offset = col * batch_size + row;
+
 	if (tid < size)
 	{
 		// output layer error
-		float diff = d_output_layer_output[tid * output_size + threadIdx.x] - d_output_data[tid * output_size +
-			threadIdx.x];
-		d_output_layer_error[tid * output_size + threadIdx.x] = diff;
+		float diff = d_output_layer_output[output_offset] - d_output_data[output_offset];
+		d_output_layer_error[output_offset] = diff;
 
 		// hidden layer error
-		float val = 1.0f - d_hidden_layer_output[tid * hidden_size + threadIdx.x] * d_hidden_layer_output[tid *
-			hidden_size + threadIdx.x];
-		d_hidden_layer_error[tid * hidden_size + threadIdx.x] = val * (d_output_layer_error[tid * output_size +
-			threadIdx.x] * d_hidden_layer_output[tid * hidden_size + threadIdx.x]);
+		float val = 1.0f - d_hidden_layer_output[hidden_offset] * d_hidden_layer_output[hidden_offset];
+		d_hidden_layer_error[hidden_offset] = val * (d_output_layer_error[output_offset] *
+			d_hidden_layer_output[hidden_offset]);
 	}
 }
 
 __global__ void update_weights(float* d_W1, float* d_b1, float* d_W2, float* d_b2, float* d_input_data,
-                               float* d_hidden_layer_error, float* d_hidden_layer_output, float* d_output_layer_error,
-                               float eta, int size, int input_size, int hidden_size, int output_size, int batch_size)
+	float* d_hidden_layer_error, float* d_hidden_layer_output, float* d_output_layer_error,
+	float eta, int size, int input_size, int hidden_size, int output_size, int batch_size)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = tid / output_size;
+	int col = tid % output_size;
+
 	if (tid < size)
 	{
-		int row = tid / hidden_size;
-		int col = tid % hidden_size;
-		int weight_idx = row * hidden_size + col;
-		d_W1[weight_idx] -= eta * d_hidden_layer_error[tid] * d_input_data[row * input_size + col];
+		int input_offset = row * input_size + col;
+		int hidden_offset = col * batch_size + row;
+
+		d_W1[input_offset] -= eta * d_hidden_layer_error[hidden_offset] * d_input_data[input_offset];
 
 		if (col == 0)
-			d_b1[row] -= eta * d_hidden_layer_error[tid];
+			d_b1[row] -= eta * d_hidden_layer_error[hidden_offset];
 
-		row = tid / output_size;
-		col = tid % output_size;
-		weight_idx = row * output_size + col;
-		d_W2[weight_idx] -= eta * d_output_layer_error[row * output_size + col] * d_hidden_layer_output[col];
+		d_W2[hidden_offset] -= eta * d_output_layer_error[row * output_size + col] *
+			d_hidden_layer_output[hidden_offset];
 
 		if (col == 0)
-			d_b2[row] -= eta * d_output_layer_error[tid];
+			d_b2[row] -= eta * d_output_layer_error[hidden_offset];
 	}
 }
 
@@ -132,12 +141,21 @@ int main(int argc, char* argv[])
 	float* d_output_layer_error;
 	float* d_hidden_layer_error;
 
-	cudaMalloc(reinterpret_cast<void**>(&d_input_data), DATA_ROWS * INPUT_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_output_data), DATA_ROWS * OUTPUT_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_output_layer_output), DATA_ROWS * OUTPUT_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_hidden_layer_output), DATA_ROWS * HIDDEN_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_output_layer_error), DATA_ROWS * OUTPUT_SIZE * sizeof(float));
-	cudaMalloc(reinterpret_cast<void**>(&d_hidden_layer_error), DATA_ROWS * HIDDEN_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_input_data), DATA_ROWS * INPUT_SIZE * BATCH_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_output_data), DATA_ROWS * OUTPUT_SIZE * BATCH_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_output_layer_output), DATA_ROWS * OUTPUT_SIZE * BATCH_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_hidden_layer_output), DATA_ROWS * HIDDEN_SIZE * BATCH_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_output_layer_error), DATA_ROWS * OUTPUT_SIZE * BATCH_SIZE * sizeof(float));
+	cudaMalloc(reinterpret_cast<void**>(&d_hidden_layer_error), DATA_ROWS * HIDDEN_SIZE * BATCH_SIZE * sizeof(float));
+
+	// Copy input/output data for each batch
+	for (int i = 0; i < BATCH_SIZE; i++)
+	{
+		cudaMemcpy(d_input_data + i * DATA_ROWS * INPUT_SIZE, input_data, DATA_ROWS * INPUT_SIZE * sizeof(float),
+			cudaMemcpyHostToDevice);
+		cudaMemcpy(d_output_data + i * DATA_ROWS * OUTPUT_SIZE, output_data, DATA_ROWS * OUTPUT_SIZE * sizeof(float),
+			cudaMemcpyHostToDevice);
+	}
 
 	float* d_W1;
 	float* d_b1;
@@ -167,19 +185,26 @@ int main(int argc, char* argv[])
 	cudaEventRecord(start, nullptr);
 	for (int epoch = 0; epoch < EPOCHS; epoch++)
 	{
-		forward_pass << <grid_size, block_size >> >(d_input_data, d_W1, d_b1, d_W2, d_b2, d_output_layer_output,
-		                                            d_hidden_layer_output, DATA_ROWS, INPUT_SIZE, HIDDEN_SIZE,
-		                                            OUTPUT_SIZE);
+		for (int i = 0; i < DATA_ROWS; i += BATCH_SIZE)
+		{
+			forward_pass << <grid_size, block_size >> > (d_input_data + i * INPUT_SIZE, d_W1, d_b1, d_W2, d_b2,
+				d_output_layer_output + i * OUTPUT_SIZE,
+				d_hidden_layer_output + i * HIDDEN_SIZE, DATA_ROWS,
+				INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
 
-		backward_pass << <grid_size, block_size >> >(d_output_layer_output, d_output_data, d_output_layer_error,
-		                                             d_hidden_layer_output, d_hidden_layer_error, DATA_ROWS,
-		                                             HIDDEN_SIZE,
-		                                             OUTPUT_SIZE);
+			backward_pass << <grid_size, block_size >> > (d_output_layer_output + i * OUTPUT_SIZE,
+				d_output_data + i * OUTPUT_SIZE,
+				d_output_layer_error + i * OUTPUT_SIZE,
+				d_hidden_layer_output + i * HIDDEN_SIZE,
+				d_hidden_layer_error + i * HIDDEN_SIZE, DATA_ROWS,
+				HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
 
-		update_weights << <grid_size, block_size >> >(d_W1, d_b1, d_W2, d_b2, d_input_data, d_hidden_layer_error,
-		                                              d_hidden_layer_output, d_output_layer_error, LR, DATA_ROWS,
-		                                              INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
-
+			update_weights << <grid_size, block_size >> > (d_W1, d_b1, d_W2, d_b2, d_input_data + i * INPUT_SIZE,
+				d_hidden_layer_error + i * HIDDEN_SIZE,
+				d_hidden_layer_output + i * HIDDEN_SIZE,
+				d_output_layer_error + i * OUTPUT_SIZE, LR, DATA_ROWS,
+				INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
+		}
 #ifdef DEBUG
 		printf("Epoch %d done\n", epoch + 1);
 #endif
