@@ -211,7 +211,7 @@ void print_info(const mlp* network) {
 		}
 		printf("\n");
 	}
-	printf("\W2:\n");
+	printf("W2:\n");
 	for (int i = 0; i < network->hidden_size; i++) {
 		for (int j = 0; j < network->output_size; j++) {
 			printf("%.4lf ", network->w2[i][j]);
