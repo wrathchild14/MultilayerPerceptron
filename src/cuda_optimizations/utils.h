@@ -1,22 +1,5 @@
 #pragma once
-#include <ctime>
 #include <string>
-
-inline void initialize_randomlly(float* weights, float* biases, const int input_size, const int output_size)
-{
-	srand(time(nullptr));
-
-	for (int i = 0; i < input_size * output_size; ++i)
-	{
-		weights[i] = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f; // Random value between -1 and 1
-	}
-
-	for (int i = 0; i < output_size; ++i)
-	{
-		// biases[i] = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f; // Random value between -1 and 1
-		biases[i] = 0.0f;
-	}
-}
 
 inline bool load_data(const char* data_path, const int input_cols, const int output_cols, const int rows,
                       float*& input_data, float*& output_data)

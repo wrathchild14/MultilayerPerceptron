@@ -9,7 +9,7 @@
 #include <curand_kernel.h>
 
 // debug printing option
-#define DEBUG
+// #define DEBUG
 
 enum
 {
@@ -17,13 +17,12 @@ enum
 	HIDDEN_SIZE = 20,
 	OUTPUT_SIZE = 8,
 	DATA_ROWS = 5000,
-	BATCH_SIZE_ENUM = 1024,
+	BATCH_SIZE_ENUM = 256,
 	EPOCHS_ENUM = 10000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
 constexpr double LR = 0.00002; // 2e-5
-
 
 __global__ void initialize_weights(float* weights, int size, unsigned long long seed)
 {
@@ -182,7 +181,7 @@ int main(int argc, char* argv[])
 		                                              INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
 
 #ifdef DEBUG
-		printf("Epoch %d: MSE Loss = %f\n", epoch + 1);
+		printf("Epoch %d done\n", epoch + 1);
 #endif
 	}
 	cudaEventRecord(stop, nullptr);
@@ -190,7 +189,6 @@ int main(int argc, char* argv[])
 
 	float* h_output_layer_output = new float[DATA_ROWS * OUTPUT_SIZE];
 	cudaMemcpy(h_output_layer_output, d_output_layer_output, DATA_ROWS * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-
 	float loss = 0.0f;
 	for (int i = 0; i < DATA_ROWS * OUTPUT_SIZE; i++)
 	{
@@ -200,6 +198,7 @@ int main(int argc, char* argv[])
 	loss /= (DATA_ROWS * OUTPUT_SIZE);
 	printf("loss: %f\n", loss);
 
+#ifdef DEBUG
 	// w and b to host
 	auto w1 = static_cast<float*>(malloc(sizeof(float) * INPUT_SIZE * HIDDEN_SIZE));
 	auto b1 = static_cast<float*>(malloc(sizeof(float) * HIDDEN_SIZE));
@@ -210,7 +209,6 @@ int main(int argc, char* argv[])
 	cudaMemcpy(w2, d_W2, HIDDEN_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy(b2, d_b2, OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 
-#ifdef DEBUG
 	printf("updated W1:\n");
 	for (int i = 0; i < INPUT_SIZE; i++)
 	{
@@ -245,9 +243,11 @@ int main(int argc, char* argv[])
 	}
 	printf("\n");
 
+	free(w1);
+	free(b1);
+	free(w2);
+	free(b2);
 #endif
-
-
 
 	float elapsed_time;
 	cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -266,10 +266,6 @@ int main(int argc, char* argv[])
 
 	delete[] input_data;
 	delete[] output_data;
-	free(w1);
-	free(b1);
-	free(w2);
-	free(b2);
 
 	return 0;
 }
