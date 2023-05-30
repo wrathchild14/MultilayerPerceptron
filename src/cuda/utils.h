@@ -13,7 +13,8 @@ inline void initialize_randomlly(float* weights, float* biases, const int input_
 
 	for (int i = 0; i < output_size; ++i)
 	{
-		biases[i] = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f; // Random value between -1 and 1
+		// biases[i] = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f; // Random value between -1 and 1
+		biases[i] = 0.0f;
 	}
 }
 

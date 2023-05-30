@@ -7,7 +7,7 @@
 #include "utils.h"
 
 // debug printing option
-// #define DEBUG
+#define DEBUG
 
 enum
 {
@@ -15,19 +15,20 @@ enum
 	HIDDEN_SIZE = 20,
 	OUTPUT_SIZE = 8,
 	DATA_ROWS = 5000,
-	BATCH_SIZE_ENUM = 128,
-	EPOCHS_ENUM = 1000,
+	BATCH_SIZE_ENUM = 1024,
+	EPOCHS_ENUM = 5000,
 };
 
 const char* DATA_PATH = "data/random_data.txt";
 constexpr double LR = 0.00002; // 2e-5
 
-__global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size)
+__global__ void calculate_loss(float* d_output_layer_output, float* d_output_data, float* d_loss, int size,
+                               int output_size)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid < size)
 	{
-		float diff = d_output_layer_output[tid] - d_output_data[tid];
+		float diff = d_output_layer_output[tid % output_size] - d_output_data[tid];
 		d_loss[tid] = 0.5f * diff * diff;
 	}
 }
@@ -68,6 +69,15 @@ __global__ void matrix_multiply(float* d_A, float* d_B, float* d_C, int m, int n
 	}
 }
 
+__global__ void element_wise_add(float* d_A, float* d_B, float* d_C, int size)
+{
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (tid < size)
+	{
+		d_C[tid] = d_A[tid] + d_B[tid];
+	}
+}
+
 __global__ void element_wise_subtract(float* d_A, float* d_B, float* d_C, int size)
 {
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -88,17 +98,17 @@ __global__ void element_wise_multiply(float* d_A, float* d_B, float* d_C, int si
 
 __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, float* d_b2,
                                       float* d_W1g, float* d_b1g, float* d_W2g, float* d_b2g,
-                                      float eta, int input_size, int hidden_size, int output_size)
+                                      float eta, int input_size, int hidden_size, int output_size, int batch_size)
 {
+	// sync threads not needed
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (idx < input_size * hidden_size)
 	{
 		int row = idx / hidden_size;
 		int col = idx % hidden_size;
-		// d_W1[idx] -= eta * d_W1g[idx];
 		int weight_idx = row * hidden_size + col;
-		d_W1[weight_idx] -= eta * d_W1g[weight_idx];
+		d_W1[weight_idx] -= eta * d_W1g[weight_idx] / batch_size;
 	}
 
 	if (idx < hidden_size)
@@ -110,9 +120,8 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 	{
 		int row = idx / output_size;
 		int col = idx % output_size;
-		// d_W2[idx] -= eta * d_W2g[idx];
 		int weight_idx = row * output_size + col;
-		d_W2[weight_idx] -= eta * d_W2g[weight_idx];
+		d_W2[weight_idx] -= eta * d_W2g[weight_idx] / batch_size;
 	}
 
 	if (idx < output_size)
@@ -138,7 +147,7 @@ int main(int argc, char* argv[])
 	if (!load_data(DATA_PATH, INPUT_COLS, OUTPUT_COLS, DATA_ROWS, input_data, output_data)) return 1;
 
 	// int num_samples = sizeof(inputData) / (sizeof(float) * INPUT_SIZE);
-	printf("log: network with data_rows:%d batch_size:%d epochs:%d learning_rate:%f\n", DATA_ROWS, BATCH_SIZE,
+	printf("creating network with data_rows:%d batch_size:%d epochs:%d learning_rate:%f\n", DATA_ROWS, BATCH_SIZE,
 	       EPOCHS, LR);
 
 	float* d_input_data;
@@ -209,10 +218,27 @@ int main(int argc, char* argv[])
 			// calculate output layer
 			matrix_multiply << <grid_size, block_size >> >(d_hidden_layer_output, d_W2, d_output_layer_output,
 			                                               BATCH_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-			element_wise_subtract << <grid_size, block_size >> >(d_output_layer_output, d_b2, d_output_layer_output,
-			                                                     BATCH_SIZE * OUTPUT_SIZE);
+			element_wise_add << <grid_size, block_size >> >(d_output_layer_output, d_b2, d_output_layer_output,
+			                                                BATCH_SIZE * OUTPUT_SIZE);
+			// output - target
+			element_wise_subtract << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
+			                                                     d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
 			tanh_activation << <grid_size, block_size >> >(d_output_layer_output, BATCH_SIZE * OUTPUT_SIZE);
 
+			// loss for ------ the current batch (todo: improve?)
+			float* d_loss;
+			cudaMalloc(reinterpret_cast<void**>(&d_loss), BATCH_SIZE * OUTPUT_SIZE * sizeof(float));
+			calculate_loss << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
+			                                              d_loss, BATCH_SIZE * OUTPUT_SIZE, OUTPUT_SIZE);
+
+			// to host
+			cudaMemcpy(loss, d_loss, BATCH_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+
+			// accumulate loss for current batch
+			for (int j = 0; j < BATCH_SIZE * OUTPUT_SIZE; j++)
+			{
+				total_loss += loss[j];
+			}
 
 			// Backward pass ------
 			// device memory for output layer error
@@ -241,22 +267,7 @@ int main(int argc, char* argv[])
 			update_weights_biases << <grid_size, block_size >> >(d_W1, d_b1, d_W2, d_b2,
 			                                                     d_input_data + i * INPUT_SIZE, d_hidden_layer_error,
 			                                                     d_hidden_layer_output, d_output_layer_error,
-			                                                     LR, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-
-			// loss for the current batch (todo: improve?)
-			float* d_loss;
-			cudaMalloc(reinterpret_cast<void**>(&d_loss), BATCH_SIZE * OUTPUT_SIZE * sizeof(float));
-			calculate_loss << <grid_size, block_size >> >(d_output_layer_output, d_output_data + i * OUTPUT_SIZE,
-			                                              d_loss, BATCH_SIZE * OUTPUT_SIZE);
-
-			// to host
-			cudaMemcpy(loss, d_loss, BATCH_SIZE * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-
-			// accumulate loss for current batch
-			for (int j = 0; j < BATCH_SIZE * OUTPUT_SIZE; j++)
-			{
-				total_loss += loss[j];
-			}
+			                                                     LR, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, BATCH_SIZE);
 
 			cudaFree(d_loss);
 			cudaFree(d_hidden_layer_output);

@@ -37,8 +37,8 @@ int main(void)
 	const int output_size = 8;
 	const int hidden_size = 20;
 	const int num_samples = 5000;
-	const int batch_size = 128;
-	const int epochs = 1000;
+	const int batch_size = 1024;
+	const int epochs = 5000;
 	const double learning_rate = 0.00002;
 
 	double** inputs = malloc(num_samples * sizeof(double*));
