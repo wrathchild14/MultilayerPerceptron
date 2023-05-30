@@ -36,7 +36,6 @@ __global__ void initialize_weights(float* weights, int size, unsigned long long 
 	}
 }
 
-
 __global__ void forward_pass(float* d_input_data, float* d_W1, float* d_b1, float* d_W2, float* d_b2,
                              float* d_output_layer_output, float* d_hidden_layer_output, int size, int input_size,
                              int hidden_size, int output_size)
@@ -69,12 +68,12 @@ __global__ void backward_pass(float* d_output_layer_output, float* d_output_data
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid < size)
 	{
-		// Calculate output layer error
+		// output layer error
 		float diff = d_output_layer_output[tid * output_size + threadIdx.x] - d_output_data[tid * output_size +
 			threadIdx.x];
 		d_output_layer_error[tid * output_size + threadIdx.x] = diff;
 
-		// Calculate hidden layer error
+		// hidden layer error
 		float val = 1.0f - d_hidden_layer_output[tid * hidden_size + threadIdx.x] * d_hidden_layer_output[tid *
 			hidden_size + threadIdx.x];
 		d_hidden_layer_error[tid * hidden_size + threadIdx.x] = val * (d_output_layer_error[tid * output_size +
@@ -106,7 +105,6 @@ __global__ void update_weights(float* d_W1, float* d_b1, float* d_W2, float* d_b
 			d_b2[row] -= eta * d_output_layer_error[tid];
 	}
 }
-
 
 int main(int argc, char* argv[])
 {
@@ -167,7 +165,6 @@ int main(int argc, char* argv[])
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	cudaEventRecord(start, nullptr);
-
 	for (int epoch = 0; epoch < EPOCHS; epoch++)
 	{
 		forward_pass << <grid_size, block_size >> >(d_input_data, d_W1, d_b1, d_W2, d_b2, d_output_layer_output,
@@ -187,6 +184,20 @@ int main(int argc, char* argv[])
 		printf("Epoch %d: MSE Loss = %f\n", epoch + 1);
 #endif
 	}
+	cudaEventRecord(stop, nullptr);
+	cudaEventSynchronize(stop);
+
+	float* h_output_layer_output = new float[DATA_ROWS * OUTPUT_SIZE];
+	cudaMemcpy(h_output_layer_output, d_output_layer_output, DATA_ROWS * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+
+	float loss = 0.0f;
+	for (int i = 0; i < DATA_ROWS * OUTPUT_SIZE; i++)
+	{
+		float diff = h_output_layer_output[i] - output_data[i];
+		loss += diff * diff;
+	}
+	loss /= (DATA_ROWS * OUTPUT_SIZE);
+	printf("loss: %f\n", loss);
 
 	// w and b to host
 	auto w1 = static_cast<float*>(malloc(sizeof(float) * INPUT_SIZE * HIDDEN_SIZE));
@@ -235,8 +246,7 @@ int main(int argc, char* argv[])
 
 #endif
 
-	cudaEventRecord(stop, nullptr);
-	cudaEventSynchronize(stop);
+
 
 	float elapsed_time;
 	cudaEventElapsedTime(&elapsed_time, start, stop);
