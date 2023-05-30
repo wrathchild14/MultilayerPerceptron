@@ -108,7 +108,7 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 		int row = idx / hidden_size;
 		int col = idx % hidden_size;
 		int weight_idx = row * hidden_size + col;
-		d_W1[weight_idx] -= eta * d_W1g[weight_idx] / batch_size;
+		d_W1[weight_idx] -= eta * d_W1g[weight_idx] / static_cast<float>(batch_size);
 	}
 
 	if (idx < hidden_size)
@@ -121,7 +121,7 @@ __global__ void update_weights_biases(float* d_W1, float* d_b1, float* d_W2, flo
 		int row = idx / output_size;
 		int col = idx % output_size;
 		int weight_idx = row * output_size + col;
-		d_W2[weight_idx] -= eta * d_W2g[weight_idx] / batch_size;
+		d_W2[weight_idx] -= eta * d_W2g[weight_idx] / static_cast<float>(batch_size);
 	}
 
 	if (idx < output_size)
