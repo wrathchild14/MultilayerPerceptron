@@ -32,7 +32,8 @@ __global__ void initialize_weights(float* weights, int size, unsigned long long 
 	{
 		curandState_t state;
 		curand_init(seed, tid, 0, &state);
-		weights[tid] = curand_uniform(&state); // Generate a random value between 0 and 1
+		float random_value = 2.0 * curand_uniform(&state) - 1.0; // random value between -1 and 1
+		weights[tid] = random_value;
 	}
 }
 
