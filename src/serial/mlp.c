@@ -201,3 +201,34 @@ void train(mlp* network, double** inputs, double** labels, const int num_samples
 	}
 	printf("training done in %f s\n", omp_get_wtime() - epochs_dt);
 }
+
+void print_info(const mlp* network) {
+	printf("Weights:\n");
+	printf("W1:\n");
+	for (int i = 0; i < network->input_size; i++) {
+		for (int j = 0; j < network->hidden_size; j++) {
+			printf("%.4lf ", network->w1[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\W2:\n");
+	for (int i = 0; i < network->hidden_size; i++) {
+		for (int j = 0; j < network->output_size; j++) {
+			printf("%.4lf ", network->w2[i][j]);
+		}
+		printf("\n");
+	}
+
+	printf("\nBiases:\n");
+	printf("B1:\n");
+	for (int i = 0; i < network->hidden_size; i++) {
+		printf("%.4lf ", network->b1[i]);
+	}
+	printf("\n");
+
+	printf("B2:\n");
+	for (int i = 0; i < network->output_size; i++) {
+		printf("%.4lf ", network->b2[i]);
+	}
+	printf("\n");
+}

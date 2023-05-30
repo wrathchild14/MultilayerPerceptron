@@ -33,13 +33,13 @@ bool load_training_data(const char* file_path, double** inputs, double** labels,
 int main(void)
 {
 	const char* file_path = "data/random_data.txt";
-	const int input_size = 4;
-	const int output_size = 3;
-	const int hidden_size = 10;
-	const int num_samples = 1000;
-	const int batch_size = 256;
-	const int epochs = 10000;
-	const double learning_rate = 0.002;
+	const int input_size = 12;
+	const int output_size = 8;
+	const int hidden_size = 20;
+	const int num_samples = 5000;
+	const int batch_size = 128;
+	const int epochs = 1000;
+	const double learning_rate = 0.00002;
 
 	double** inputs = malloc(num_samples * sizeof(double*));
 	double** labels = malloc(num_samples * sizeof(double*));
@@ -53,6 +53,7 @@ int main(void)
 	{
 		mlp* network = create_mlp(input_size, hidden_size, output_size);
 		train(network, inputs, labels, num_samples, learning_rate, epochs, batch_size);
+		print_info(network);
 		free_network(network);
 	}
 	for (int i = 0; i < num_samples; i++)

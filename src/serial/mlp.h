@@ -33,5 +33,6 @@ void backward(const mlp* network, const double* input, const double* target, dou
 
 void train(mlp* network, double** inputs, double** labels, int num_samples, double learning_rate,
            int epochs, int batch_size);
+void print_info(const mlp* network);
 
 #endif /* MLP_H */
